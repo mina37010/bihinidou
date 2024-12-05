@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>備品移動メール生成ページ</title>
+    <style>
+        #buttons {
+            margin-bottom: 10px;
+        }
+        .button-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .copy-button {
+            margin-left: 10px;
+        }
+        #loadingText {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>備品移動メール生成ページ</h1>
+
+    <!-- 全体コピー用ボタンを最上部に配置 -->
+    <div id="buttons" class="button-container">
+        <button id="button1">行き</button>
+        <button id="button2">帰り</button>
+        <button id="button3">降ろし</button>
+        <button id="copyCurrentButton">表示テキストをコピー</button> <!-- 表示されている結果コピー用ボタン -->
+    </div>
+
+    <div id="loadingText">読み込み中...</div>
+
+    <div id="csvContent" style="border: 1px solid #ccc; padding: 10px; max-width: 600px;"></div>
+
+    <script>
+        // URLパラメータからsheetUrlを取得
+        const urlParams = new URLSearchParams(window.location.search);
+        const sheetUrl = urlParams.get('sheetUrl');  // "sheetUrl"パラメータを取得
+
+        if (sheetUrl) {
+            loadCSVData(sheetUrl);
+        } else {
+            alert('URLパラメータにsheetUrlを指定してください。');
+        }
+
+        // CSVデータを取得して表示する関数
+        function loadCSVData(sheetUrl) {
+            // 読み込み中テキストを表示
+            document.getElementById('loadingText').style.display = 'block';
+            // Google Sheetsの公開URLからSheet IDを抽出
+            const sheetId = sheetUrl.match(/spreadsheets\/d\/([^\/]+)/)[1];
+            const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+
+            // CSVデータを取得
+            fetch(csvUrl)
+            
+                .then(response => response.text())
+                .then(csv => {
+                    // 読み込み中テキストを非表示
+                    document.getElementById('loadingText').style.display = 'none';
+                    // CSVデータを行ごとに分割
+                    const rows = csv.split('\n');
+
+                    // ボタンのクリックイベントを設定
+                    document.getElementById('button1').onclick = function() {
+                        displayColumns(rows, 0);
+                    };
+                    document.getElementById('button2').onclick = function() {
+                        displayColumns(rows, 2);
+                    };
+                    document.getElementById('button3').onclick = function() {
+                        displayColumns(rows, 4);
+                    };
+
+                    // 現在表示されている結果をコピーするボタンのクリックイベントを設定
+                    document.getElementById('copyCurrentButton').onclick = function() {
+                        copyCurrentDisplayedData();
+                    };
+                })
+                .catch(error => {
+                    console.error('CSVの読み込みに失敗しました:', error);
+                });
+        }
+
+        function displayColumns(rows, column) {
+            // 結果を格納する配列
+            const resultArray = [];
+            let preSpace = "";
+
+            // 最初の2行は処理しない
+            for (let i = 9; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.split(',');
+
+                if (cells[0] && cells[3 + column]) { // 1列目が空でない場合のみ処理
+                    if (cells[2 + column] !== "") {
+                        resultArray.push([cells[0], cells[2 + column], cells[3 + column]]);
+                        preSpace = cells[2 + column];
+                    } else {
+                        resultArray.push([cells[0], preSpace, cells[3 + column]]);
+                    }
+                }
+            }
+            for (let i = 9; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.split(',');
+
+                if (cells[8] && cells[11 + column]) { // 1列目が空でない場合のみ処理
+                    if (cells[10 + column] !== "") {
+                        resultArray.push([cells[8], cells[10 + column], cells[11 + column]]);
+                        preSpace = cells[10 + column];
+                    } else {
+                        resultArray.push([cells[8], preSpace, cells[11 + column]]);
+                    }
+                }
+            }
+            for (let i = 9; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.split(',');
+
+                if (cells[17] && cells[19 + column]) { // 1列目が空でない場合のみ処理
+                    if (cells[18 + column] !== "") {
+                        resultArray.push([cells[17], cells[18 + column], cells[19 + column]]);
+                        preSpace = cells[18 + column];
+                    } else {
+                        resultArray.push([cells[17], preSpace, cells[19 + column]]);
+                    }
+                }
+            }
+
+            // ソート処理: 真ん中の列でソート（インデックス1）
+            resultArray.sort((a, b) => {
+                const valueA = a[1].toLowerCase();  // 小文字にして比較（大文字小文字を区別しない）
+                const valueB = b[1].toLowerCase();
+                if (valueA < valueB) return -1;
+                if (valueA > valueB) return 1;
+                return 0;
+            });
+
+            // HTMLに結果を表示
+            const csvContentDiv = document.getElementById('csvContent');
+            csvContentDiv.innerHTML = '';  // 以前の内容をクリア
+
+            // ソートに使用した文字列を表示
+            let prevValue = "";
+            const buttons = []; // ボタンを格納する配列
+
+            // 最初に表示非表示ボタンを追加
+            const toggleVisibilityContainer = document.createElement('div');
+            csvContentDiv.appendChild(toggleVisibilityContainer);
+
+            resultArray.forEach(item => {
+                const currentValue = item[1]; // 真ん中の列の値
+                if (currentValue !== prevValue) {
+                    const heading = document.createElement('h3');
+                    heading.textContent = `→ ${currentValue}`;
+                    heading.classList.add(`heading-${currentValue}`);
+                    csvContentDiv.appendChild(heading);
+
+                    // 表示非表示ボタンを作成
+                    const button = document.createElement('button');
+                    button.textContent = `表示: ${currentValue}`;
+                    button.classList.add('toggle-visibility');
+                    button.setAttribute('data-value', currentValue);
+                    button.checked = true; // 初期状態で表示
+                    button.onclick = function() {
+                        const rows = document.querySelectorAll(`.row-${currentValue}`);
+                        const heading = document.querySelector(`.heading-${currentValue}`);
+                        if (heading) {
+                            heading.style.display = heading.style.display === 'none' ? 'block' : 'none';
+                        }
+                        rows.forEach(row => {
+                            row.style.display = row.style.display === 'none' ? 'block' : 'none';
+                        });
+                        // ボタンテキストを更新
+                        if (button.textContent.startsWith('表示')) {
+                            button.textContent = `非表示: ${currentValue}`;
+                        } else {
+                            button.textContent = `表示: ${currentValue}`;
+                        }
+                    };
+                    toggleVisibilityContainer.appendChild(button); // ボタンをdiv内に配置
+
+                    prevValue = currentValue;
+                }
+
+                // その後に続くデータを表示
+                const paragraph = document.createElement('p');
+                paragraph.textContent = `${item[0]} : ${item[2]}`;
+                paragraph.classList.add(`row-${currentValue}`); // このデータに関連付け
+                csvContentDiv.appendChild(paragraph);
+            });
+        }
+
+        // 現在表示されているデータをコピーする関数
+        function copyCurrentDisplayedData() {
+            // 表示されている要素のみを選択
+            const displayedContent = document.querySelectorAll('#csvContent h3, #csvContent p');
+
+            // その中で非表示でないものだけをフィルタリング
+            const visibleContent = Array.from(displayedContent)
+                .filter(content => content.style.display !== 'none')  // 非表示の要素を除外
+                .map(content => content.textContent)
+                .join('\n');
+
+            // クリップボードにコピー
+            if (visibleContent) {
+                navigator.clipboard.writeText(visibleContent)
+                    .then(() => {
+                        alert(`データがコピーされました！`);
+                    })
+                    .catch(err => {
+                        alert('コピーに失敗しました: ' + err);
+                    });
+            } else {
+                alert('表示されているデータがありません。');
+            }
+        }
+
+    </script>
+
+</body>
+</html>
